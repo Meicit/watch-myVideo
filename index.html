@@ -3,258 +3,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vòng Quay May Mắn Premium</title>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <title>360 Video Player for SD Card</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://p2p.xyz/js/panolens.min.js"></script>
     <style>
-        :root { 
-            --primary: #e63946; 
-            --secondary: #457b9d; 
-            --success: #2a9d8f; 
-            --dark: #1d3557;
+        body { margin: 0; background: #1a1a1a; font-family: sans-serif; overflow: hidden; }
+        #container { width: 100%; height: 100vh; }
+        #controls {
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%); z-index: 10;
+            background: rgba(0,0,0,0.7); padding: 15px; border-radius: 10px;
+            display: flex; gap: 10px; align-items: center; color: white;
         }
-
-        body { 
-            font-family: 'Segoe UI', Roboto, sans-serif; 
-            text-align: center; 
-            background: radial-gradient(circle, var(--dark) 0%, #000 100%); 
-            color: #fff; 
-            margin: 0; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            height: 100vh; 
-            overflow: hidden;
-        }
-
-        .container { 
-            width: 95%; 
-            max-width: 900px; 
-            background: rgba(255, 255, 255, 0.98); 
-            padding: 50px; 
-            border-radius: 50px; 
-            box-shadow: 0 0 100px rgba(230, 57, 70, 0.4); 
-            color: #333;
-        }
-
-        h1 { 
-            font-size: 4rem; 
-            color: var(--primary); 
-            margin: 0 0 30px 0; 
-            text-transform: uppercase; 
-            letter-spacing: 5px;
-            text-shadow: 2px 2px 0px #ddd;
-        }
-        
-        /* Khung hiển thị giải thưởng khổng lồ */
-        .prize-display { 
-            font-size: 10rem; 
-            font-weight: 900; 
-            margin: 40px 0; 
-            height: 250px; 
-            line-height: 250px;
-            color: var(--secondary); 
-            background: #f1f3f5; 
-            border: 12px solid #dee2e6; 
-            border-radius: 40px;
-            transition: all 0.3s;
-            box-shadow: inset 0 10px 20px rgba(0,0,0,0.1);
-        }
-
-        /* Nút quay siêu to */
-        button { 
-            padding: 30px 100px; 
-            font-size: 3rem; 
-            font-weight: bold; 
-            cursor: pointer; 
-            background-color: var(--success); 
-            color: white; 
-            border: none; 
-            border-radius: 100px; 
-            transition: all 0.1s; 
-            box-shadow: 0 15px 0 #1b665d; 
-            outline: none;
-            text-transform: uppercase;
-        }
-
-        button:active { 
-            transform: translateY(10px); 
-            box-shadow: 0 5px 0 #1b665d; 
-        }
-
-        button:disabled { 
-            background-color: #bdc3c7; 
-            box-shadow: 0 8px 0 #7f8c8d; 
-            transform: translateY(5px); 
-        }
-
-        .info-panel { 
-            display: flex; 
-            justify-content: center; 
-            gap: 60px; 
-            margin-top: 50px; 
-            font-size: 2rem; 
-            font-weight: bold;
-            border-top: 3px solid #eee;
-            padding-top: 30px;
-        }
-
-        .count-item span { 
-            color: var(--primary); 
-            font-size: 2.5rem; 
-        }
-        
-        /* Chỉ báo ẩn (Rất mờ để tránh bị lộ) */
-        #mode-indicator { 
-            position: fixed; 
-            top: 15px; 
-            right: 20px; 
-            font-size: 12px; 
-            color: rgba(255, 255, 255, 0.03); 
-            user-select: none;
-        }
+        input[type="file"] { color: #fff; }
+        .mode-badge { padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .normal { background: #4CAF50; }
+        .v360 { background: #2196F3; }
     </style>
 </head>
 <body>
 
-<div id="mode-indicator">Normal</div>
-
-<div class="container">
-    <h1>🎊 LUCKY DRAW 🎊</h1>
-    
-    <div class="prize-display" id="result">READY</div>
-    
-    <button id="spinBtn" onclick="spin()">QUAY (Space)</button>
-
-    <div class="info-panel">
-        <div class="count-item">Giải 50k: <span id="count50">5</span></div>
-        <div class="count-item">Giải 20k: <span id="count20">10</span></div>
-    </div>
+<div id="controls">
+    <label>Chọn video từ thẻ nhớ:</label>
+    <input type="file" id="fileInput" accept="video/*">
+    <select id="videoType">
+        <option value="normal">Video thường</option>
+        <option value="360">Video 360 độ</option>
+    </select>
 </div>
 
-<audio id="tickSound" src="https://www.soundjay.com/buttons/sounds/button-16.mp3"></audio>
-<audio id="winSound" src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3"></audio>
+<div id="container"></div>
 
 <script>
-    // CẤU HÌNH BAN ĐẦU
-    let inventory = { "50.000": 5, "20.000": 10, "10.000": Infinity };
-    let isSpinning = false;
-    let cheatMode = false; 
+    const container = document.querySelector('#container');
+    const fileInput = document.querySelector('#fileInput');
+    const videoType = document.querySelector('#videoType');
+    let viewer, videoPano;
 
-    // 1. XỬ LÝ PHÍM TẮT
-    window.addEventListener('keydown', (e) => {
-        // Phím Space để quay
-        if (e.code === "Space" && !isSpinning) {
-            spin();
-        }
-        
-        // Phím Alt Phải (Right Alt) để kích hoạt giải 50k
-        if (e.code === "AltRight" || e.key === "AltGraph") { 
-            cheatMode = true; 
-            document.getElementById('mode-indicator').innerText = "Target: 50K";
-            e.preventDefault();
+    // Khởi tạo viewer của Panolens
+    viewer = new PANOLENS.Viewer({ container: container });
+
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const url = URL.createObjectURL(file);
+
+        // Xóa video cũ nếu có
+        if (videoPano) {
+            viewer.remove(videoPano);
+            videoPano.dispose();
         }
 
-        // Phím 'C' để quay về bình thường nếu bấm nhầm
-        if (e.key.toLowerCase() === "c") { 
-            cheatMode = false; 
-            document.getElementById('mode-indicator').innerText = "Normal"; 
+        if (videoType.value === '360') {
+            // Chế độ 360 độ
+            videoPano = new PANOLENS.VideoPano(url, { autoplay: true, muted: false });
+            viewer.add(videoPano);
+            viewer.setPanorama(videoPano);
+        } else {
+            // Chế độ thường (giả lập màn hình phẳng trong không gian 3D)
+            // Hoặc bạn có thể dùng thẻ <video> thuần túy để tối ưu hơn
+            alert("Đang phát ở chế độ 360 giả lập cho video thường.");
+            videoPano = new PANOLENS.VideoPano(url, { autoplay: true });
+            viewer.add(videoPano);
+            viewer.setPanorama(videoPano);
         }
     });
-
-    function spin() {
-        if (isSpinning) return;
-        
-        const btn = document.getElementById('spinBtn');
-        const resultDiv = document.getElementById('result');
-        const tick = document.getElementById('tickSound');
-        
-        isSpinning = true;
-        btn.disabled = true;
-        resultDiv.style.color = "#457b9d";
-
-        let counter = 0;
-        let totalSpins = 150; // Thời gian quay lâu hơn (~4.5 giây)
-
-        const interval = setInterval(() => {
-            // Hiệu ứng nhảy số ngẫu nhiên cực nhanh
-            const temp = ["10k", "20k", "50k", "XXk", "??k", "99k"];
-            resultDiv.innerText = temp[Math.floor(Math.random() * temp.length)];
-            
-            // Âm thanh mỗi lần nhảy số
-            tick.volume = 0.2;
-            tick.currentTime = 0;
-            tick.play();
-
-            counter++;
-            if (counter > totalSpins) {
-                clearInterval(interval);
-                finalizeResult();
-            }
-        }, 30); // 30ms = Tốc độ nhảy số cực nhanh
-    }
-
-    function finalizeResult() {
-        const btn = document.getElementById('spinBtn');
-        const resultDiv = document.getElementById('result');
-        const winSound = document.getElementById('winSound');
-        
-        let finalPrize = "";
-
-        // 2. LOGIC QUAY SỐ & CHẾ ĐỘ ẨN
-        if (cheatMode && inventory["50.000"] > 0) {
-            finalPrize = "50.000";
-            // TỰ ĐỘNG RESET VỀ BÌNH THƯỜNG SAU KHI DÙNG
-            cheatMode = false; 
-            document.getElementById('mode-indicator').innerText = "Normal";
-        } else {
-            let pool = [];
-            // Thêm các giải còn lại vào danh sách lựa chọn
-            if (inventory["50.000"] > 0) pool.push("50.000");
-            if (inventory["20.000"] > 0) pool.push("20.000");
-            
-            // Tăng tỉ lệ giải 10k (xuất hiện 15 lần trong pool)
-            for(let i=0; i<15; i++) pool.push("10.000"); 
-
-            finalPrize = pool[Math.floor(Math.random() * pool.length)];
-        }
-
-        // Cập nhật số lượng trong kho
-        if (inventory[finalPrize] !== Infinity) {
-            inventory[finalPrize]--;
-        }
-
-        // 3. HIỂN THỊ KẾT QUẢ
-        resultDiv.innerText = finalPrize + "đ";
-        resultDiv.style.color = "#e63946";
-        
-        // Phát âm thanh thắng giải
-        winSound.play();
-
-        // 4. HIỆU ỨNG PHÁO HOA
-        if (finalPrize === "50.000") {
-            // Pháo hoa tưng bừng cho giải lớn nhất
-            var duration = 4 * 1000;
-            var end = Date.now() + duration;
-            (function frame() {
-                confetti({ particleCount: 10, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff0000', '#ffd700', '#ffffff'] });
-                confetti({ particleCount: 10, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff0000', '#ffd700', '#ffffff'] });
-                if (Date.now() < end) requestAnimationFrame(frame);
-            }());
-        } else {
-            // Pháo hoa nhẹ cho các giải khác
-            confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-        }
-
-        updateUI();
-        isSpinning = false;
-        btn.disabled = false;
-    }
-
-    function updateUI() {
-        document.getElementById('count50').innerText = inventory["50.000"];
-        document.getElementById('count20').innerText = inventory["20.000"];
-    }
 </script>
-
 </body>
 </html>
