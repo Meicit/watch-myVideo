@@ -3,137 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360° Video Player - GitHub Edition</title>
+    <title>360° Player Pro - GitHub</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://p2p.xyz/js/panolens.min.js"></script>
     
     <style>
-        body, html { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
-        }
-
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
         #container { width: 100%; height: 100vh; }
 
-        /* Bảng điều khiển phía trên */
-        #gui-controls {
-            position: absolute; top: 20px; left: 50%;
-            transform: translateX(-50%); z-index: 100;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px 25px; border-radius: 50px;
-            display: flex; gap: 15px; align-items: center;
-            border: 1px solid #444; color: white;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        /* Giao diện chọn file */
+        #top-bar {
+            position: absolute; top: 0; left: 0; right: 0; height: 60px;
+            background: rgba(0,0,0,0.6); display: flex; align-items: center;
+            padding: 0 20px; z-index: 100; color: white; gap: 15px;
         }
 
-        input[type="file"] { font-size: 14px; cursor: pointer; }
-
-        select {
-            background: #333; color: white; border: none;
-            padding: 5px 10px; border-radius: 5px; cursor: pointer;
+        /* Thanh điều khiển tùy chỉnh phía dưới */
+        #custom-controls {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            z-index: 100; background: rgba(0,0,0,0.8); padding: 10px 25px;
+            border-radius: 50px; display: none; align-items: center; gap: 20px;
+            border: 1px solid rgba(255,255,255,0.2);
         }
 
-        /* Lớp phủ thông báo/nút bấm */
+        button { 
+            background: #444; color: white; border: none; padding: 8px 15px; 
+            border-radius: 5px; cursor: pointer; font-weight: bold;
+        }
+        button:hover { background: #666; }
+        
+        input[type="range"] { cursor: pointer; accent-color: #ff4757; }
+        
         #overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); display: none;
-            flex-direction: column; justify-content: center; align-items: center;
-            z-index: 200; color: white; text-align: center;
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+            display: none; flex-direction: column; justify-content: center;
+            align-items: center; z-index: 200; color: white;
         }
-
-        .play-btn {
-            background: #ff4757; border: none; color: white;
-            padding: 15px 40px; font-size: 18px; border-radius: 30px;
-            cursor: pointer; font-weight: bold; margin-top: 15px;
-            transition: transform 0.2s;
-        }
-
-        .play-btn:hover { transform: scale(1.1); background: #ff6b81; }
-
-        .status { font-size: 12px; color: #aaa; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-<div id="gui-controls">
-    <label for="fileInput">📁 Chọn Video:</label>
-    <input type="file" id="fileInput" accept="video/mp4,video/x-m4v,video/*">
+<div id="top-bar">
+    <strong>360° Viewer:</strong>
+    <input type="file" id="fileInput" accept="video/*">
     <select id="videoType">
         <option value="360">Chế độ 360°</option>
-        <option value="normal">Chế độ Thường (Phẳng)</option>
+        <option value="flat">Chế độ phẳng</option>
     </select>
 </div>
 
 <div id="overlay">
-    <h2 id="fileNameDisplay">Video đã sẵn sàng</h2>
-    <button class="play-btn" id="startBtn">NHẤN ĐỂ XEM</button>
-    <p class="status">Cần tương tác để kích hoạt âm thanh & hình ảnh</p>
+    <h2 id="msg">Sẵn sàng phát</h2>
+    <button style="padding: 20px 50px; font-size: 20px; border-radius: 50px; background: #ff4757;" id="startBtn">PLAY NOW</button>
 </div>
 
 <div id="container"></div>
 
+<div id="custom-controls">
+    <button id="playPauseBtn">PAUSE</button>
+    
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <span>Loa:</span>
+        <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="1">
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <span>Zoom:</span>
+        <input type="range" id="zoomSlider" min="30" max="120" value="70">
+    </div>
+</div>
+
 <script>
     const container = document.querySelector('#container');
     const fileInput = document.querySelector('#fileInput');
-    const videoType = document.querySelector('#videoType');
-    const overlay = document.querySelector('#overlay');
+    const playPauseBtn = document.querySelector('#playPauseBtn');
+    const volumeSlider = document.querySelector('#volumeSlider');
+    const zoomSlider = document.querySelector('#zoomSlider');
+    const controls = document.querySelector('#custom-controls');
     const startBtn = document.querySelector('#startBtn');
-    const fileNameDisplay = document.querySelector('#fileNameDisplay');
+    const overlay = document.querySelector('#overlay');
 
-    let viewer, videoPano;
+    let viewer, videoPano, videoElement;
 
-    // 1. Khởi tạo Viewer
+    // Khởi tạo Viewer với tùy chọn thanh công cụ mặc định tắt để dùng thanh tùy chỉnh
     viewer = new PANOLENS.Viewer({ 
         container: container,
-        autoHideControlBar: false,
-        controlBar: true,
+        controlBar: true, 
+        autoHideControlBar: false 
     });
 
-    // 2. Xử lý khi chọn file
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
         const url = URL.createObjectURL(file);
-        fileNameDisplay.innerText = file.name;
-        
-        // Hiện lớp phủ yêu cầu nhấn Play
         overlay.style.display = 'flex';
 
-        // Xóa video cũ nếu đang chạy
         if (videoPano) {
             viewer.remove(videoPano);
             videoPano.dispose();
         }
 
-        // Tạo Panorama Video mới
-        if (videoType.value === '360') {
-            videoPano = new PANOLENS.VideoPano(url, { 
-                autoplay: false, // Sẽ cho play thủ công qua nút
-                muted: false,
-                loop: true 
-            });
-        } else {
-            // Video thường nhưng vẫn hiển thị trong không gian 360 (giả lập rạp phim)
-            videoPano = new PANOLENS.VideoPano(url, { autoplay: false });
-        }
-
+        // Tạo video pano
+        videoPano = new PANOLENS.VideoPano(url, { autoplay: false, muted: false });
         viewer.add(videoPano);
         viewer.setPanorama(videoPano);
+
+        // Lấy đối tượng video thuần từ thư viện để điều khiển Volume/Play
+        videoPano.addEventListener('video-ready', function() {
+            videoElement = videoPano.getVideoElement();
+            controls.style.display = 'flex';
+        });
     });
 
-    // 3. Xử lý nút Start (Khắc phục lỗi không play)
-    startBtn.addEventListener('click', function() {
-        if (videoPano) {
-            videoPano.play(); // Lệnh quan trọng nhất
-            overlay.style.display = 'none';
+    // Nút Play/Pause
+    playPauseBtn.addEventListener('click', function() {
+        if (videoElement.paused) {
+            videoElement.play();
+            playPauseBtn.innerText = "PAUSE";
+        } else {
+            videoElement.pause();
+            playPauseBtn.innerText = "PLAY";
         }
     });
 
-    // Hỗ trợ xoay chuột linh hoạt
-    window.addEventListener('resize', function() {
-        viewer.onWindowResize();
+    // Điều chỉnh âm lượng
+    volumeSlider.addEventListener('input', function() {
+        if (videoElement) {
+            videoElement.volume = this.value;
+        }
+    });
+
+    // Điều chỉnh Zoom (Field of View)
+    zoomSlider.addEventListener('input', function() {
+        viewer.camera.fov = this.value;
+        viewer.camera.updateProjectionMatrix();
+    });
+
+    // Bắt đầu phát từ Overlay
+    startBtn.addEventListener('click', function() {
+        if (videoElement) {
+            videoElement.play();
+            overlay.style.display = 'none';
+            playPauseBtn.innerText = "PAUSE";
+        }
     });
 </script>
 
